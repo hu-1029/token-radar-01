@@ -397,6 +397,24 @@ function gasFor(chain: string): { setup: string; weekly: string } {
   return { setup: 'about $1 of gas', weekly: 'about $1 of gas a week' };
 }
 
+/** The native gas token of the protocol's main chain, for the wallet setup step. */
+function gasTokenFor(chain: string): string {
+  const c = chain.toLowerCase();
+  if (c.includes('solana')) return 'SOL';
+  if (c.includes('avalanche')) return 'AVAX';
+  if (c.includes('binance') || c.includes('bnb')) return 'BNB';
+  if (c.includes('tron')) return 'TRX';
+  if (c.includes('sui')) return 'SUI';
+  if (c.includes('aptos')) return 'APT';
+  if (c.includes('near')) return 'NEAR';
+  if (c.includes('cosmos')) return 'ATOM';
+  if (c.includes('bitcoin')) return 'BTC';
+  if (c.includes('polygon')) return 'POL';
+  if (c.includes('cardano')) return 'ADA';
+  if (c.includes('ton')) return 'TON';
+  return 'ETH';
+}
+
 /** The category's one action, in the words a farmer can follow. */
 function actionFor(p: SnapshotProtocol, capital: number, chain: string): string {
   const c = (p.category ?? '').toLowerCase();
@@ -442,11 +460,12 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   const capital = capitalFor(p);
   const hold = holdDaysFor(age);
   const gas = gasFor(chain);
+  const gasToken = gasTokenFor(chain);
   const action = actionFor(p, capital, chain);
   return [
     {
-      text: `Use a fresh wallet that holds only the funds you plan to farm, and keep its seed phrase offline.`,
-      cost: 'under $3 of gas for the first transaction',
+      text: `Use a fresh wallet on ${chain} that holds only the funds you plan to farm, and keep its seed phrase offline. Fund it with a little ${gasToken} for gas.`,
+      cost: `${gas.setup} for the first transaction`,
       time: '5 minutes',
     },
     {
@@ -470,7 +489,7 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       time: '10 minutes',
     },
     {
-      text: `Write the wallet, the dates and every transaction in a farm log so you can repeat the position or unwind it.`,
+      text: `Write the wallet, the dates and every ${p.name} transaction in a farm log so you can repeat the position or unwind it.`,
       cost: 'nothing but the log',
       time: '5 minutes',
     },
