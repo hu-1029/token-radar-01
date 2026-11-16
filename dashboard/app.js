@@ -351,7 +351,7 @@
         h('p', { text: t('emptyText') }),
         h('button', { class: 'button primary', type: 'button', text: t('clearFilters'), onclick: () => { state.q = ''; state.category = 'all'; state.chain = 'all'; state.watchlistOnly = false; writeHash(); render(); } })));
     }
-    const max = list[0].implied_value_usd || 1;
+    const max = Math.max(...list.map((r) => r.implied_value_usd || 0), 1);
     const tbody = h('tbody');
     for (const r of list) {
       const growthClass = r.change_7d === null ? '' : r.change_7d >= 0 ? 'pos' : 'neg';
