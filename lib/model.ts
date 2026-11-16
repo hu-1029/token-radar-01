@@ -401,7 +401,9 @@ function gasFor(chain: string): { setup: string; weekly: string } {
 function actionFor(p: SnapshotProtocol, capital: number, chain: string): string {
   const c = (p.category ?? '').toLowerCase();
   const name = p.name;
-  if (c.includes('lend') || c.includes('cdp') || c.includes('collateral')) return `Supply $${capital} of USDC to ${name} on ${chain} and keep the position open, borrowing no more than half of what you supplied.`;
+  if (c.includes('cdp')) return `Lock $${capital} of collateral on ${name} on ${chain} and mint its stablecoin, keeping the collateral ratio above the protocol's minimum.`;
+  if (c.includes('lend') || c.includes('collateral')) return `Supply $${capital} of USDC to ${name} on ${chain} and keep the position open, borrowing no more than half of what you supplied.`;
+  if (c.includes('index')) return `Buy $${capital} of ${name}'s index token on ${chain} and hold it.`;
   if (c.includes('dex')) return `Provide $${capital} of liquidity to ${name}'s main pool on ${chain} in a narrow range, and keep the position open.`;
   if (c.includes('yield aggregator') || c.includes('leveraged farm')) return `Deposit $${capital} of USDC into ${name}'s highest-TVL strategy on ${chain} and let it compound.`;
   if (c.includes('yield')) return `Deposit $${capital} of USDC into ${name}'s main vault on ${chain} and keep the shares.`;
@@ -420,7 +422,9 @@ function actionFor(p: SnapshotProtocol, capital: number, chain: string): string 
 /** The category's weekly qualifying action: what to repeat, not a generic "do something". */
 function weeklyActionFor(p: SnapshotProtocol): string {
   const c = (p.category ?? '').toLowerCase();
-  if (c.includes('lend') || c.includes('cdp') || c.includes('collateral')) return `Top up the supply by $10 or repay and re-borrow $10, so the week shows a fresh lending action.`;
+  if (c.includes('cdp')) return `Top up the collateral by $10 or repay $10 of the minted stablecoin, so the week shows a fresh CDP action.`;
+  if (c.includes('lend') || c.includes('collateral')) return `Top up the supply by $10 or repay and re-borrow $10, so the week shows a fresh lending action.`;
+  if (c.includes('index')) return `Buy $10 more of the index token or rebalance once, so the week shows a fresh index action.`;
   if (c.includes('dex')) return `Swap $10 through the pool or add $10 of liquidity, so the week shows a fresh trading action.`;
   if (c.includes('yield') || c.includes('curator') || c.includes('allocator') || c.includes('rwa')) return `Claim the week's yield if any, then re-deposit $10, so the week shows a fresh vault action.`;
   if (c.includes('perpetual') || c.includes('derivative')) return `Close the hedge and open one new small hedge, so the week shows a fresh trading action.`;
@@ -461,7 +465,7 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       time: `${hold} days`,
     },
     {
-      text: `Before you withdraw, open the protocol's own points or rewards page and claim only from the link it publishes.`,
+      text: `Before you withdraw, check the protocol's own site for any points or rewards claim and only ever use a link it publishes; if it runs no rewards program, skip this step.`,
       cost: 'no fee to check, and never pay to claim',
       time: '10 minutes',
     },
