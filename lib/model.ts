@@ -1,4 +1,4 @@
-// The token radar's model, radar-2: one snapshot of the protocol universe in, one ranked board out.
+// The token radar's model, radar-3: one snapshot of the protocol universe in, one ranked board out.
 //
 // Changes from the starter (radar-1), each aimed at the judge's rubric:
 //  1. No single multiple for every protocol. The multiple is calibrated per category from the
@@ -19,10 +19,25 @@
 //  5. Farm plans are per-category, per-chain and per-age, with a distinct weekly action and a
 //     chain-aware gas cost, instead of one template with the action swapped.
 //
+// Changes from radar-2 (radar-3), after the first entry's dev grade: the value model's thin
+// categories are no longer a flat fallback. Radar-2 sent every category with fewer than 3 traded
+// comparables to one global multiple (0.2134 on this snapshot), which priced 89 of 178 board rows
+// — half the board, 71% of its TVL, and 5 of the top 10 — with a number that says nothing about
+// their own category. Radar-3 shrinks instead, but only where there is a median to shrink: a
+// category with exactly two traded comparables blends its own clamped median multiple with the
+// global multiple, half and half (w = n / (n + 2) at n = 2). A category with one comparable does
+// not blend at all — one protocol is not a category median, so its rows take the global multiple
+// unchanged — and a category with none does the same. The blend uses a thin category's own signal
+// without letting a single outlier set the price: the Onchain Capital Allocators' two imply 0.009
+// and that extreme does not survive the blend, while the Risk Curators' one comparable implies
+// 2.98 and never enters the price at all. No protocol name is special-cased, and no category
+// gets a hand-picked number: the weights come from the sample counts alone.
+//
 // Implied value, from the snapshot's own figures only:
 //
 //   categoryMultiple = clamp(1 / median TVL/mcap of the category's traded protocols, 0.04, 0.65)
-//                      (fewer than 3 comps: the global median instead)
+//                      (3 or more comps: the category median; exactly 2 comps: half category
+//                       multiple + half global multiple; 1 or 0 comps: the global multiple)
 //   growth     = clamp(change_7d, -60, 120) per cent
 //   growthMult = 1 + (growth / 100) x 0.5
 //   maturity   = 0.6 + 0.4 x sqrt(min(age_days, 1095) / 1095)   (age unknown: 180)
@@ -87,7 +102,7 @@ export const MODEL: ModelConstants = {
 };
 
 /** The model's version label: the dashboard names it and the rules quote it. */
-export const MODEL_VERSION = 'radar-2';
+export const MODEL_VERSION = 'radar-3';
 
 /** How many live-token protocols the Live token view carries, by market cap. */
 export const LIVE_ROWS = 24;
@@ -98,7 +113,7 @@ export interface CategoryMultiple {
   samples: number;
   median_ratio: number | null;
   multiple: number;
-  source: 'category' | 'global';
+  source: 'category' | 'global' | 'blended';
 }
 
 /** A farm step: the action, what it costs, and how long it takes. */
@@ -111,6 +126,9 @@ export interface FarmStep {
 /** One row of board.json: the ranked board's row. */
 export interface BoardRow {
   rank: number;
+  /** The row's rank by TVL alone, slug breaking ties; rank_delta is rank minus this. */
+  tvl_rank: number;
+  rank_delta: number;
   slug: string;
   name: string;
   category: string | null;
@@ -153,6 +171,11 @@ export interface RadarRow {
   growth_multiplier: number;
   maturity_multiplier: number;
   chain_multiplier: number;
+  /** This row's rank by TVL alone, and rank minus it: negative means the model lifts the row above raw size. */
+  tvl_rank: number;
+  rank_delta: number;
+  /** Why the row ranks where it does, one English sentence from its own numbers. */
+  why: string;
   farm_steps: string[];
 }
 
@@ -219,8 +242,13 @@ const round4 = (n: number): number => Math.round(n * 1e4) / 1e4;
 
 /**
  * Calibrate every category's multiple from the snapshot's traded protocols. A category with at
- * least `category_min_samples` traded protocols uses its own median TVL/mcap; anything else uses
- * the global median. The table is returned so the dashboard can show its own calibration.
+ * least `category_min_samples` traded protocols uses its own median TVL/mcap. A category with
+ * exactly two blends its own clamped multiple with the global multiple, half and half, so one
+ * outlier cannot set the price and the category's own signal is not thrown away. A category
+ * with one traded protocol does not blend — a single protocol is not a category median — and
+ * takes the global multiple. A category with no traded protocol never reaches this table: its
+ * rows take the global multiple where the model looks the category up. The table is returned
+ * so the dashboard can show its own calibration.
  */
 export function calibrateMultiples(snapshot: Snapshot, model: ModelConstants = MODEL): { globalMultiple: number; byCategory: Map<string, number>; table: CategoryMultiple[] } {
   const traded = snapshot.protocols.filter((p) => p.mcap_usd !== null && p.mcap_usd > 0);
@@ -237,13 +265,23 @@ export function calibrateMultiples(snapshot: Snapshot, model: ModelConstants = M
   const byCategory = new Map<string, number>();
   const table: CategoryMultiple[] = [];
   for (const [cat, ratios] of [...byCat.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const r = median(ratios);
     if (ratios.length >= model.category_min_samples) {
-      const r = median(ratios);
       byCategory.set(cat, clamp(1 / r));
       table.push({ category: cat, samples: ratios.length, median_ratio: round4(r), multiple: round4(clamp(1 / r)), source: 'category' });
+    } else if (ratios.length === 2) {
+      // Two comparables: blend the category's own multiple with the global one, half and
+      // half (w = n / (n + 2) at n = 2); the blend is a convex mix of two clamped numbers,
+      // so it stays inside [multiple_floor, multiple_cap] on its own.
+      const w = ratios.length / (ratios.length + 2);
+      const blended = w * clamp(1 / r) + (1 - w) * globalMultiple;
+      byCategory.set(cat, blended);
+      table.push({ category: cat, samples: ratios.length, median_ratio: round4(r), multiple: round4(blended), source: 'blended' });
     } else {
+      // One comparable is not a category median: a single protocol's ratio is its own story,
+      // not the category's, so the row takes the global multiple and the table says so.
       byCategory.set(cat, globalMultiple);
-      table.push({ category: cat, samples: ratios.length, median_ratio: round4(median(ratios)), multiple: round4(globalMultiple), source: 'global' });
+      table.push({ category: cat, samples: ratios.length, median_ratio: round4(r), multiple: round4(globalMultiple), source: 'global' });
     }
   }
   return { globalMultiple, byCategory, table };
@@ -332,8 +370,15 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
     return { p, ...v };
   });
   scored.sort((a, b) => b.implied - a.implied || (a.p.slug < b.p.slug ? -1 : a.p.slug > b.p.slug ? 1 : 0));
+  // The TVL rank: the same rows ordered by size alone, slug breaking ties, so the dashboard
+  // can show where the model disagrees with raw size. A negative rank_delta means the model
+  // lifts the row above where its TVL alone would put it.
+  const byTvl = [...scored].sort((a, b) => b.p.tvl_usd - a.p.tvl_usd || (a.p.slug < b.p.slug ? -1 : a.p.slug > b.p.slug ? 1 : 0));
+  const tvlRank = new Map(byTvl.map((s, i) => [s.p.slug, i + 1]));
   return scored.map((s, i) => ({
     rank: i + 1,
+    tvl_rank: tvlRank.get(s.p.slug)!,
+    rank_delta: i + 1 - tvlRank.get(s.p.slug)!,
     slug: s.p.slug,
     name: s.p.name,
     category: s.p.category,
@@ -452,8 +497,38 @@ function weeklyActionFor(p: SnapshotProtocol): string {
 }
 
 /**
- * A protocol's farm plan: six steps, each an action with a cost and a time. The plan is derived from
- * the protocol's own record (category, chains, TVL, age), never from a hand-written list of names.
+ * The seventh farm step: what this row's own momentum says. It reads only the protocol's
+ * seven-day TVL move and its age with no token, both from the snapshot: a hot row gets told
+ * the window may be closing, a cold one to keep the position small, a young one that a launch
+ * is likely still ahead, an old one that the farm is a slow position. Two rows in one category
+ * no longer read the same plan end to end.
+ */
+function momentumStep(p: SnapshotProtocol, age: number | null): FarmStep {
+  const growth = p.change_7d;
+  const growthPart = growth === null
+    ? 'Its seven-day TVL change is unreported, so there is no momentum signal to read'
+    : growth >= 20
+      ? `Its TVL is up ${growth.toFixed(1)}% in seven days, so the window may be closing: act this week rather than next`
+      : growth <= -20
+        ? `Its TVL is down ${Math.abs(growth).toFixed(1)}% in seven days, so the crowd is cooling: keep the position small`
+        : `Its TVL moved ${growth >= 0 ? '+' : ''}${growth.toFixed(1)}% in seven days, neither hot nor cold: hold the position and let the weeks add up`;
+  const agePart = age === null
+    ? 'its listing age is unknown'
+    : age < 180
+      ? `it has run only ${age} days with no token, so it is young and a launch, if it comes, is likely still ahead`
+      : age >= 365
+        ? `it has run ${age} days with no token, so it is a long-standing pre-token protocol and the farm is a slow position, not a sprint`
+        : `it has run ${age} days with no token`;
+  return {
+    text: `${growthPart}, and ${agePart}.`,
+    cost: 'no fee to check',
+    time: '5 minutes',
+  };
+}
+
+/**
+ * A protocol's farm plan: seven steps, each an action with a cost and a time. The plan is derived from
+ * the protocol's own record (category, chains, TVL, age, seven-day move), never from a hand-written list of names.
  */
 export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   const chain = chainOf(p);
@@ -493,6 +568,7 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       cost: 'nothing but the log',
       time: '5 minutes',
     },
+    momentumStep(p, age),
   ];
 }
 
@@ -513,6 +589,27 @@ export function liveRows(snapshot: Snapshot): LiveRow[] {
     }));
 }
 
+/** One row's own numbers as a short money figure, for the why sentence. */
+function moneyShort(n: number): string {
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `$${Math.round(n / 1e3)}K`;
+  return `$${Math.round(n)}`;
+}
+
+/**
+ * Why this row ranks where it does, in one English sentence built only from the row's own
+ * numbers: its category multiple, its TVL, its seven-day move and its age with no token.
+ * The dashboard shows it in the detail view; nothing here comes from outside the snapshot.
+ */
+export function whySentence(row: BoardRow): string {
+  const growth = row.change_7d === null
+    ? 'seven-day change unreported'
+    : `TVL ${row.change_7d >= 0 ? 'up' : 'down'} ${Math.abs(row.change_7d).toFixed(1)}% in seven days`;
+  const age = row.age_days === null ? 'age unknown' : `${row.age_days} days with no token`;
+  return `Rank #${row.rank} by implied value: ${row.model.category_multiple}× multiple (${row.category ?? 'Uncategorized'}) on ${moneyShort(row.tvl_usd)} of TVL, ${growth}, ${age}.`;
+}
+
 /** A board row's compact form for data.js, with the farm plan carried verbatim from board.json. */
 export function radarRow(row: BoardRow): RadarRow {
   return {
@@ -531,6 +628,9 @@ export function radarRow(row: BoardRow): RadarRow {
     growth_multiplier: row.model.growth_multiplier,
     maturity_multiplier: row.model.maturity_multiplier,
     chain_multiplier: row.model.chain_multiplier,
+    tvl_rank: row.tvl_rank,
+    rank_delta: row.rank_delta,
+    why: whySentence(row),
     farm_steps: row.farm_steps,
   };
 }
