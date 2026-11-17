@@ -6,8 +6,8 @@
 // the summary the judge reads, with the vendored make.fun library.
 //
 // The dashboard is a static page, no framework and no network: dashboard/index.html, dashboard/app.css
-// and dashboard/app.js read /output/data.js, which this program writes from the same board. Radar-2:
-// category-calibrated multiples, a clean early radar (no bridges / staking receipts / wrapped
+// and dashboard/app.js read /output/data.js, which this program writes from the same board. Radar-3:
+// shrinkage-calibrated multiples, a clean early radar (no bridges / staking receipts / wrapped
 // assets), per-category farm plans, and a dashboard that shows the model's arithmetic per row.
 //
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
