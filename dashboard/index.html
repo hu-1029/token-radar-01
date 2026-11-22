@@ -8,9 +8,133 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<a class="skip" href="#board">Skip to the board</a>
-<main id="board" tabindex="-1" aria-busy="true"></main>
-<noscript><p>This dashboard needs JavaScript: it renders the board from the snapshot data beside it.</p></noscript>
+<header class="top">
+  <div class="wrap">
+    <p class="eyebrow">Token Radar · radar-4 · snapshot <span id="asOf">—</span></p>
+    <h1>Which pre-token protocol is worth farming next?</h1>
+    <p class="lede">Every protocol below is priced from the snapshot's own traded tokens: a fitted curve says what its token would be worth if it launched, the peers' record at its age says how often launches happen, and the product of the two is its implied value. No protocol is hand-picked, and no multiple is set by hand.</p>
+    <div id="selfcheck" class="selfcheck" role="status" aria-live="polite">Checking the board…</div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="kpis" id="kpis" aria-label="Key figures"></section>
+
+  <section class="panel" id="formula">
+    <h2>How a value is built</h2>
+    <p class="formula" id="formulaLine">—</p>
+    <p id="formulaNote">—</p>
+    <div class="worked" id="workedExample"></div>
+    <p class="fine">The drop share prices the farm, not the value: a protocol is not worth less because only part of its token is airdropped. The chain term is fitted, not assumed — on this snapshot it comes out slightly negative. TVL alone does not predict whether a token is recorded at all.</p>
+  </section>
+
+  <section class="panel" id="farmbox">
+    <h2>Farm next</h2>
+    <p id="farmSummary">—</p>
+    <div class="sliders">
+      <label>Deposit <output id="depositOut">$5,000</output>
+        <input type="range" id="deposit" min="100" max="50000" step="100" value="5000">
+      </label>
+      <label>Drop share <output id="shareOut">7.0%</output>
+        <input type="range" id="share" min="1" max="20" step="0.5" value="7">
+      </label>
+      <label>Hold <output id="horizonOut">12 weeks</output>
+        <input type="range" id="horizon" min="4" max="52" step="1" value="12">
+      </label>
+      <label>T-bill rate <output id="tbillOut">4.0%</output>
+        <input type="range" id="tbill" min="0" max="8" step="0.25" value="4">
+      </label>
+    </div>
+    <p class="fine">FARM means the net beats the same deposit in T-bills over the hold <em>and</em> clears $25 an hour. MARGINAL means the net is positive. SKIP means it is not. Move a slider and the whole board recomputes.</p>
+    <ol class="farmnext" id="farmNext"></ol>
+  </section>
+
+  <section class="panel" id="boardbox">
+    <h2>The board <span class="count" id="boardCount"></span></h2>
+    <div class="controls">
+      <label>Search <input type="search" id="search" placeholder="Name or slug" autocomplete="off"></label>
+      <label>Category <select id="category"><option value="">All categories</option></select></label>
+      <label>Verdict <select id="verdict"><option value="">All verdicts</option><option>FARM</option><option>MARGINAL</option><option>SKIP</option></select></label>
+      <label class="check"><input type="checkbox" id="watchlistOnly"> Watchlist only</label>
+      <label>Sort by <select id="sort">
+        <option value="implied">Implied value</option>
+        <option value="tvl">TVL</option>
+        <option value="launch">Launch value</option>
+        <option value="odds">Launch odds</option>
+        <option value="net">Net per hour</option>
+      </select></label>
+    </div>
+    <div class="tablewrap">
+      <table id="board">
+        <thead><tr>
+          <th>#</th><th>Protocol</th><th>TVL</th><th>7d</th><th>Launch value</th><th>Odds</th><th>Implied value</th><th>Verdict</th><th>Net / hour</th><th>vs TVL rank</th>
+        </tr></thead>
+        <tbody id="boardBody"></tbody>
+      </table>
+    </div>
+    <p class="fine" id="boardNote"></p>
+    <nav class="views"><a href="#method">Method and validation</a> · <a href="#live">Already trading</a> · <a href="#ledger">Full ledger</a></nav>
+  </section>
+
+  <section class="panel" id="method">
+    <h2>Method and validation</h2>
+    <p class="claim" id="claimLine">—</p>
+    <h3>The fitted curve, against the traded tokens</h3>
+    <canvas id="scatter" width="860" height="420" aria-label="Scatter plot of traded tokens: market cap against TVL, with the fitted curve"></canvas>
+    <p class="fine" id="scatterNote">—</p>
+    <h3>Does each term earn its place?</h3>
+    <table id="ablation">
+      <thead><tr><th>Term</th><th>Leave-one-out miss</th><th>Walk-forward miss</th><th>Kept?</th><th>Why</th></tr></thead>
+      <tbody id="ablationBody"></tbody>
+    </table>
+    <h3>Launch odds: a logistic fit on age</h3>
+    <p id="oddsCurveNote">—</p>
+    <table id="oddsCurve">
+      <thead><tr><th>Age</th><th>Fitted odds</th></tr></thead>
+      <tbody id="oddsCurveBody"></tbody>
+    </table>
+    <h3>The peers' record by age — the evidence the curve was fitted from</h3>
+    <table id="odds">
+      <thead><tr><th>Age</th><th>Peers</th><th>Recorded a token</th><th>Share</th></tr></thead>
+      <tbody id="oddsBody"></tbody>
+    </table>
+    <p id="oddsNote">—</p>
+    <h3>Interval honesty</h3>
+    <p id="intervalNote">—</p>
+    <p class="fine">Walk-forward means: fit on the protocols listed before the median listing date, test on the ones listed after it.</p>
+  </section>
+
+  <section class="panel" id="live">
+    <h2>Already trading — set aside, not ranked</h2>
+    <p class="fine">These protocols already have a token, so the board shows the market's own value for them instead of a model's. They are never mixed into the ranking.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Protocol</th><th>TVL</th><th>Market cap</th><th>7d</th></tr></thead>
+        <tbody id="liveBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="ledger">
+    <h2>Full ledger — every protocol in the snapshot, in exactly one group</h2>
+    <div class="stacked" id="stackedBar" aria-label="Ledger stacked bar"></div>
+    <table>
+      <thead><tr><th>Group</th><th>Count</th><th>Share</th></tr></thead>
+      <tbody id="ledgerBody"></tbody>
+    </table>
+    <p class="fine" id="ledgerNote"></p>
+  </section>
+
+  <footer>
+    <p>Token Radar, radar-4. Built from a sealed snapshot of <span id="footTotal">—</span> protocols, as of <span id="footAsOf">—</span>. Static page, no network: every figure on it is recomputed from the data file beside it.</p>
+  </footer>
+</main>
+
+<aside id="drawer" class="drawer" aria-hidden="true">
+  <button id="drawerClose" class="drawerclose" type="button">Close ×</button>
+  <div id="drawerBody"></div>
+</aside>
+
 <script src="../data.js"></script>
 <script src="app.js"></script>
 </body>
