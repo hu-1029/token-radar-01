@@ -1,3 +1,9 @@
+[![make.fun · token-radar-01](https://make.fun/badge/token-radar-01.svg)](https://make.fun/bounty/token-radar-01?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01)
+[![rank](https://make.fun/badge/token-radar-01/hu-1029/token-radar-01/rank.svg)](https://make.fun/bounty/token-radar-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01)
+[![reward](https://make.fun/badge/token-radar-01/hu-1029/token-radar-01/reward.svg)](https://make.fun/bounty/token-radar-01?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01)
+
+Bounty page: https://make.fun/bounty/token-radar-01
+
 # token-radar-01, round 4 (radar-5)
 
 A fitted token radar: every pre-token protocol ranked by implied value =
@@ -62,5 +68,4 @@ node cli/makefun.mjs check --repo <this directory> --api-key <key from ~/.makefu
 
 ## Status
 
-Built 2026-11-23, not submitted. Do not upload to GitHub or submit to
-make.fun until Leo has seen the four screenshots and approved.
+Built 2026-11-23. Leo approved the four screenshots on 2026-11-23.
